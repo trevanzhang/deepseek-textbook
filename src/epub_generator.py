@@ -1,3 +1,11 @@
+"""
+    "若提示未找到pandoc！请按以下方式配置：\n"
+    "1. 下载安装pandoc: https://pandoc.org/installing.html\n"
+    "2. 设置环境变量：\n"
+    "   - 例如：C:\\Program Files\\Pandoc\\pandoc.exe\n"
+    "   - 或者将pandoc所在目录添加到系统PATH中\n"
+"""
+
 import os
 import logging
 import pypandoc
@@ -24,13 +32,16 @@ class EpubGenerator:
         self.output_dir.mkdir(exist_ok=True)
 
     def get_textbooks(self) -> Dict[str, List[Path]]:
-        """获取所有教材的markdown文件"""
+        """获取所有教材的markdown文件，按创建时间排序"""
         textbooks = {}
         for textbook_dir in self.textbook_dir.iterdir():
             if textbook_dir.is_dir():
-                files = sorted(list(textbook_dir.glob('*.md')))
+                # 获取所有markdown文件并按创建时间排序
+                files = list(textbook_dir.glob('*.md'))
+                files.sort(key=lambda x: x.stat().st_mtime)  # 使用最后修改时间排序
                 if files:
                     textbooks[textbook_dir.name] = files
+                    logger.info(f"教材 {textbook_dir.name} 的章节顺序：{[f.stem for f in files]}")
         return textbooks
 
     def create_metadata(self, title: str) -> str:
@@ -50,10 +61,13 @@ class EpubGenerator:
 
     def merge_markdown_files(self, files: List[Path], output_file: Path) -> Path:
         """合并markdown文件"""
-        merged_content = []
+        merged_content = ['# 目录\n\n']  # 添加目录标题
         for file in files:
             with open(file, 'r', encoding='utf-8') as f:
                 content = f.read()
+                # 确保每个章节都以二级标题开始
+                if not content.startswith('## '):
+                    content = f'## {file.stem}\n\n{content}'
                 merged_content.append(content)
                 merged_content.append('\n\n---\n\n')  # 添加分隔符
 
@@ -90,8 +104,12 @@ class EpubGenerator:
                         extra_args=[
                             f'--metadata-file={metadata_file}',
                             '--toc',  # 添加目录
-                            '--toc-depth=2',
-                            '--epub-chapter-level=2'
+                            '--toc-depth=3',  # 增加目录深度
+                            '--split-level=2',  # 设置章节级别
+                            # '--epub-chapter-level=2',  # 设置章节级别
+                            # '--number-sections',  # 添加章节编号
+                            '--standalone',  # 生成完整的文档
+                            '--css=style.css'  # 添加样式表支持
                         ]
                     )
                     
